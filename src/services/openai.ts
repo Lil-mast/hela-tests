@@ -50,24 +50,54 @@ Key guidelines:
 
 You should be conversational, helpful, and focused on empowering users to take control of their financial lives.`;
 
-  private handleOpenAIError(error: any): string {
-    console.error('OpenAI API Error:', error);
-    
-    // Check for specific error types
-    if (error?.status === 429 || error?.message?.includes('quota') || error?.message?.includes('429')) {
+  private handleOpenAIError(error: unknown): string {
+  console.error('OpenAI API Error:', error);
+
+  // Type guard for Axios/HTTP errors
+  if (typeof error === 'object' && error !== null) {
+    const err = error as {
+      status?: number;
+      message?: string;
+      response?: {
+        status?: number;
+        data?: {
+          error?: {
+            message?: string;
+          };
+        };
+      };
+    };
+
+    // Extract status from different error formats
+    const status = err.status || err.response?.status;
+    const message = (err.message || err.response?.data?.error?.message || '').toLowerCase();
+
+    // Handle specific error cases
+    if (status === 429 || message.includes('quota') || message.includes('rate limit')) {
       return 'quota_exceeded';
     }
-    
-    if (error?.status === 401 || error?.message?.includes('401') || error?.message?.includes('authentication')) {
+
+    if (status === 401 || message.includes('401') || message.includes('authentication')) {
       return 'auth_error';
     }
-    
-    if (error?.status >= 500 || error?.message?.includes('server')) {
+
+    if ((status && status >= 500) || message.includes('server')) {
       return 'server_error';
     }
-    
-    return 'general_error';
   }
+
+  // Handle non-object errors (strings, etc)
+  if (typeof error === 'string') {
+    if (error.includes('quota') || error.includes('429')) {
+      return 'quota_exceeded';
+    }
+    if (error.includes('401') || error.includes('authentication')) {
+      return 'auth_error';
+    }
+  }
+
+  return 'general_error';
+}
 
   async getChatResponse(
     messages: ChatMessage[],
